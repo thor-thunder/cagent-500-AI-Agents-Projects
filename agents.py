@@ -453,6 +453,86 @@ _WANT_PAT = re.compile(r"\bi\s+(?:want|need|am\s+looking\s+for)\s+([a-z0-9$ &'\-
 _BUDGET_PAT = re.compile(r"\$\s*(\d{2,5})|under\s+\$?\s*(\d{2,5})|max\s+\$?\s*(\d{2,5})")
 
 
+# Sub-modes for the personalize agent: the six subprojects of microsoft/RecAI.
+# Each entry: (subproject name, one-line purpose, trigger keywords, repo path).
+# Triggers are matched against the parsed profile (likes + wants joined),
+# using word-boundary matching, and ranked by hit count.
+_RECAI_SUBPROJECTS: list[tuple[str, str, tuple[str, ...], str]] = [
+    (
+        "InteRecAgent",
+        "Conversational recommender combining LLMs with traditional recommender models",
+        (
+            "recommend", "recommender", "recommendation", "agent",
+            "chat", "conversation", "interactive", "dialog",
+        ),
+        "https://github.com/microsoft/RecAI/tree/main/InteRecAgent",
+    ),
+    (
+        "Knowledge_Plugin",
+        "Selective Knowledge Plugin that augments LLMs with domain-specific knowledge",
+        (
+            "domain", "knowledge", "industry", "vertical", "augment",
+            "context", "specialized", "expert",
+        ),
+        "https://github.com/microsoft/RecAI/tree/main/Knowledge_Plugin",
+    ),
+    (
+        "RecLM-emb",
+        "Embedding-based recommender LM optimized for item retrieval and similarity search",
+        (
+            "retrieval", "search", "similar", "similarity", "embedding",
+            "embeddings", "vector", "find", "lookup",
+        ),
+        "https://github.com/microsoft/RecAI/tree/main/RecLM-emb",
+    ),
+    (
+        "RecLM-gen",
+        "Generative recommender LM produced by fine-tuning a language model on rec data",
+        (
+            "fine-tune", "finetune", "fine-tuning", "train", "training",
+            "custom", "generative", "personal", "personalized", "personalised",
+        ),
+        "https://github.com/microsoft/RecAI/tree/main/RecLM-gen",
+    ),
+    (
+        "RecExplainer",
+        "Uses LLMs to interpret and explain why a recommendation system produced its output",
+        (
+            "explain", "explanation", "explainable", "why", "interpret",
+            "interpretation", "transparent", "transparency", "understand",
+        ),
+        "https://github.com/microsoft/RecAI/tree/main/RecExplainer",
+    ),
+    (
+        "RecLM-eval",
+        "Benchmarks and evaluates LM-based recommenders on quality and behavior metrics",
+        (
+            "evaluate", "evaluation", "benchmark", "metrics", "measure",
+            "compare", "comparison", "score", "scoring",
+        ),
+        "https://github.com/microsoft/RecAI/tree/main/RecLM-eval",
+    ),
+]
+
+
+def _rank_recai_subprojects(signal_text: str) -> list[tuple[int, str, str, str]]:
+    """Score each RecAI subproject against `signal_text` (already lowercased).
+
+    Returns a list of (score, name, purpose, url) sorted by score descending,
+    excluding entries that did not match anything. Order ties broken by the
+    order in `_RECAI_SUBPROJECTS`.
+    """
+    scored: list[tuple[int, str, str, str]] = []
+    for name, purpose, triggers, url in _RECAI_SUBPROJECTS:
+        score = sum(
+            1 for t in triggers if re.search(rf"\b{re.escape(t)}\b", signal_text)
+        )
+        if score > 0:
+            scored.append((score, name, purpose, url))
+    scored.sort(key=lambda row: row[0], reverse=True)
+    return scored
+
+
 def _clean_list(items: list[str]) -> list[str]:
     seen: list[str] = []
     for raw in items:
@@ -507,6 +587,30 @@ def personalize(prompt: str) -> str:
     out.append("Next steps:")
     for s in suggestions:
         out.append(f"  - {s}")
+    out.append("")
+
+    # Score the six RecAI subprojects against the parsed profile and surface
+    # the strongest matches. The signal is the joined likes+wants text so
+    # filler words from the original prompt do not influence ranking.
+    signal = " ".join(likes + wants).lower()
+    ranked = _rank_recai_subprojects(signal) if signal else []
+
+    out.append("RecAI sub-modes (microsoft/RecAI):")
+    if ranked:
+        out.append("Best fits for your profile, ranked by signal hits:")
+        for score, name, purpose, url in ranked:
+            out.append(f"  - {name} (score={score})")
+            out.append(f"      {purpose}")
+            out.append(f"      {url}")
+    else:
+        out.append(
+            "No specific sub-mode matched the profile. "
+            "All six subprojects are listed for reference:"
+        )
+        for name, purpose, _triggers, url in _RECAI_SUBPROJECTS:
+            out.append(f"  - {name}")
+            out.append(f"      {purpose}")
+            out.append(f"      {url}")
     return "\n".join(out)
 
 

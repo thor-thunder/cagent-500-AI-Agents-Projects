@@ -46,6 +46,23 @@ Parses preference statements (`I like X`, `I prefer Y`, `I dislike Z`,
 steps that hand off into another route (`fullstack` or `code`) when a
 concrete want is detected.
 
+After producing the profile, the handler ranks the six subprojects of
+[microsoft/RecAI](https://github.com/microsoft/RecAI) against the parsed
+likes + wants and recommends the best-fit sub-modes:
+
+| Sub-mode          | Purpose                                                                  |
+| ----------------- | ------------------------------------------------------------------------ |
+| `InteRecAgent`    | Conversational recommender that combines an LLM with a classic recsys    |
+| `Knowledge_Plugin`| Augments LLMs with domain-specific knowledge for vertical recommenders   |
+| `RecLM-emb`       | Embedding-based retrieval and similarity search for items                |
+| `RecLM-gen`       | Generative recommender LM produced by fine-tuning on rec data            |
+| `RecExplainer`    | Uses an LLM to interpret and explain why a recommender produced its output |
+| `RecLM-eval`      | Benchmarks and evaluates LM-based recommenders on quality metrics        |
+
+Scoring is by word-boundary keyword hits over the parsed signal (`likes` +
+`wants` joined). If the profile yields no matches, the handler lists all six
+subprojects as available reference paths.
+
 ### Gaming AI Assist — trigger: `game`
 Detects game genre (chess, FPS, RPG, strategy, puzzle) and returns concise
 strategy tips per genre. Multiple genres in one prompt produce multiple
