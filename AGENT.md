@@ -9,13 +9,13 @@ trigger the `hack` route and `decoded` does not trigger the `code` route.
 
 ## Keyword → Agent map
 
-| Keyword   | Agent                          | Reference                                           |
-| --------- | ------------------------------ | --------------------------------------------------- |
-| `hack`    | Vibe Hacking Agent             | https://github.com/PurpleAILAB/Decepticon           |
-| `code`    | Virtual AI Tutor               | https://github.com/hqanhh/EduGPT                    |
-| `buy`     | Product Recommendation Agent   | https://github.com/microsoft/RecAI                  |
-| `specify` | Product Personalization Agent  | https://github.com/crosleythomas/MirrorGPT          |
-| `game`    | Gaming AI Assist               | https://github.com/onjas-buidl/LLM-agent-game       |
+| Keyword      | Agent                          | Reference                                           |
+| ------------ | ------------------------------ | --------------------------------------------------- |
+| `hack`       | Vibe Hacking Agent             | https://github.com/PurpleAILAB/Decepticon           |
+| `code`       | Virtual AI Tutor               | https://github.com/hqanhh/EduGPT                    |
+| `fullstack`  | Fullstack Development Agent    | https://github.com/All-Hands-AI/OpenHands           |
+| `specify`    | Product Personalization Agent  | https://github.com/crosleythomas/MirrorGPT          |
+| `game`       | Gaming AI Assist               | https://github.com/onjas-buidl/LLM-agent-game       |
 
 Resolution order follows the table top-to-bottom: the first keyword that
 matches wins. Inputs with no matching keyword return `None` from `route()` and
@@ -34,16 +34,17 @@ Picks a lesson based on topic keywords (recursion, complexity, debugging, data
 structures, testing) and returns a summary, key vocabulary, a worked example,
 practice problems, and further reading.
 
-### Product Recommendation Agent — trigger: `buy`
-Detects a category (headphones, laptop, phone, coffee, books) and returns
-ranked picks with rationale and price. Honors a stated budget such as
-`under $300`; lists stretch picks separately when present.
+### Fullstack Development Agent — trigger: `fullstack`
+Detects which layer of the stack the prompt is about (frontend, backend,
+database, auth, deployment, architecture, testing) and returns concrete,
+opinionated guidance per layer. With no specific layer mentioned, returns a
+sensible default starter stack.
 
 ### Product Personalization Agent — trigger: `specify`
 Parses preference statements (`I like X`, `I prefer Y`, `I dislike Z`,
 `I want W`, `under $N`) and returns a structured profile plus suggested next
-steps, including a hand-off into the `buy` route when a concrete want is
-detected.
+steps that hand off into another route (`fullstack` or `code`) when a
+concrete want is detected.
 
 ### Gaming AI Assist — trigger: `game`
 Detects game genre (chess, FPS, RPG, strategy, puzzle) and returns concise
@@ -54,7 +55,7 @@ sections.
 
 ```bash
 # One-shot
-python3 agent_router.py "I want to buy headphones under \$300"
+python3 agent_router.py "I need help picking a fullstack starter"
 
 # Interactive (Ctrl-D to exit)
 python3 agent_router.py
@@ -72,6 +73,78 @@ if agent:
 print(dispatch("how do I improve my chess game?"))
 ```
 
+## Examples
+
+Concrete one-shot inputs and the route they take:
+
+| Input                                              | Routes to                       |
+| -------------------------------------------------- | ------------------------------- |
+| `"I need to hack a web api with weak auth"`        | Vibe Hacking Agent              |
+| `"explain recursion to me, code please"`           | Virtual AI Tutor                |
+| `"recommend a fullstack stack for a side project"` | Fullstack Development Agent     |
+| `"I prefer typed languages, specify my profile"`   | Product Personalization Agent   |
+| `"any tips for my chess game?"`                    | Gaming AI Assist                |
+| `"hackathon next weekend"`                         | (no match — word boundary)      |
+| `"the message was decoded"`                        | (no match — word boundary)      |
+
+## Design notes
+
+**Matching strategy.** `route()` walks `AGENTS` in insertion order and runs
+`re.search(r"\b{keyword}\b", text.lower())`. The first hit wins. Insertion
+order in `agent_router.py` therefore doubles as priority order; if you add a
+keyword that overlaps semantically with an existing one (e.g. `web`), put the
+more specific keyword earlier.
+
+**Handler contract.** Every handler in `agents.py` has the signature
+`handler(prompt: str) -> str`. Handlers must:
+- Be deterministic — same input, same output, every time.
+- Make no network calls and import nothing that does.
+- Read no environment variables and require no API keys.
+- Return a string ready to be printed; the router adds a banner above it.
+
+**Why deterministic.** Reproducible output makes the router safe to call from
+any context (CLI, library, scripted pipelines, CI), trivially testable, and
+free to run. The trade-off is bounded coverage: the handlers only know what
+their internal tables encode. For open-ended LLM responses, see *Standing up
+the upstream projects*.
+
+## Limitations
+
+- Keyword matching does not understand intent. `"I want to play a game"`
+  routes to Gaming AI Assist correctly; `"this is a fun game of cat and
+  mouse"` also routes there, even though no real game advice is wanted.
+- Only the first matching keyword wins. A prompt mentioning both `code` and
+  `fullstack` will only get the tutor response unless you re-order
+  `AGENTS`.
+- Handler topics are bounded by the tables in `agents.py`. Inputs outside
+  those tables fall through to a "no specific topic detected" branch.
+- Word boundaries are ASCII-defined. Languages with non-Latin word
+  boundaries may match unexpectedly; if you need that, replace the regex
+  with a unicode-aware tokenizer.
+
+## Testing
+
+The handlers are pure functions, so `pytest` works out of the box without
+any fixtures or mocks. Suggested coverage:
+
+```python
+# tests/test_router.py
+from agent_router import route, dispatch
+
+def test_each_keyword_routes():
+    for keyword in ["hack", "code", "fullstack", "specify", "game"]:
+        assert route(f"please {keyword} this").name  # any non-None match
+
+def test_word_boundary():
+    assert route("hackathon next weekend") is None
+    assert route("the message was decoded") is None
+
+def test_dispatch_includes_banner():
+    out = dispatch("teach me recursion in code")
+    assert "Virtual AI Tutor" in out
+    assert "Topic: recursion" in out
+```
+
 ## Adding a new agent
 
 1. Write a handler in `agents.py` with the signature `def handler(prompt: str) -> str`.
@@ -80,6 +153,8 @@ print(dispatch("how do I improve my chess game?"))
    determines match priority. Choose a keyword that is short, lowercase, and
    unlikely to appear incidentally in unrelated input.
 3. Add a row to the keyword table above and a description below.
+4. Add a test that the new keyword routes to the new agent and that a
+   semantically similar but non-keyword prompt does not.
 
 ## Why no API?
 
@@ -143,18 +218,22 @@ echo "OPENAI_API_KEY=sk-..." > .env
 python src/run.py
 ```
 
-### Product Recommendation Agent — RecAI
+### Fullstack Development Agent — OpenHands
 
-- Repo: https://github.com/microsoft/RecAI
+- Repo: https://github.com/All-Hands-AI/OpenHands
 - License: MIT
-- Structure: a monorepo of six independent subprojects, each with its own
-  setup. Pick one and follow that subdirectory's README.
+- An open-source autonomous software-engineering agent. Use when you want a
+  real coding agent rather than the deterministic guidance from the local
+  `fullstack` handler.
 
 ```bash
-git clone https://github.com/microsoft/RecAI.git
-cd RecAI
-cd InteRecAgent   # or another subproject
-# follow that subdirectory's README for deps and launch commands
+# Quickest path uses Docker; check the upstream README for the current
+# pinned image tag and config schema.
+docker run -it --rm \
+  --pull=always \
+  -e SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:latest \
+  -p 3000:3000 \
+  ghcr.io/all-hands-ai/openhands:latest
 ```
 
 ### Product Personalization Agent — MirrorGPT

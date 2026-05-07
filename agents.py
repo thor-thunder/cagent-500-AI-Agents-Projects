@@ -11,6 +11,19 @@ import re
 from dataclasses import dataclass
 
 
+def _contains_word(text: str, words: tuple[str, ...] | list[str]) -> bool:
+    """True if any element of `words` appears in `text` with word boundaries.
+
+    Uses the same matching semantics as the top-level router so that short
+    keywords (e.g. "ci", "web", "api") cannot match inside unrelated words
+    (e.g. "specify", "rapid").
+    """
+    for w in words:
+        if re.search(rf"\b{re.escape(w)}\b", text):
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Vibe Hacking Agent  (trigger: "hack")
 # ---------------------------------------------------------------------------
@@ -89,7 +102,7 @@ def vibe_hacking(prompt: str) -> str:
     matched = [
         (title, items)
         for title, keywords, items in _HACK_CATEGORIES
-        if any(k in text for k in keywords)
+        if _contains_word(text, keywords)
     ]
 
     out = [
@@ -260,7 +273,7 @@ def tutor(prompt: str) -> str:
     text = prompt.lower()
     chosen: str | None = None
     for topic, triggers in _LESSON_TRIGGERS.items():
-        if any(t in text for t in triggers):
+        if _contains_word(text, triggers):
             chosen = topic
             break
 
@@ -301,115 +314,133 @@ def tutor(prompt: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Product Recommendation Agent  (trigger: "buy")
+# Fullstack Development Agent  (trigger: "fullstack")
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class _Product:
-    name: str
-    price_usd: int
-    why: str
-
-
-_CATALOG: dict[str, tuple[tuple[str, ...], list[_Product]]] = {
-    "headphones": (
-        ("headphone", "headphones", "earbud", "earbuds", "earphone"),
+_FULLSTACK_LAYERS: list[tuple[str, tuple[str, ...], list[str]]] = [
+    (
+        "Frontend",
+        ("frontend", "front-end", "ui", "react", "vue", "svelte", "next", "css", "tailwind", "component", "state"),
         [
-            _Product("Sony WH-1000XM5", 350, "Class-leading active noise cancellation, comfortable for long sessions"),
-            _Product("Sennheiser HD 600", 400, "Reference-grade open-back tuning for music listening at a desk"),
-            _Product("Apple AirPods Pro 2", 230, "Best-in-class integration if you live in the Apple ecosystem"),
+            "Default to a typed React/Next.js or SvelteKit setup; pick one and stop comparing",
+            "Push state out of components: server state in TanStack Query / RSC, URL state in the router",
+            "Use one styling system (Tailwind or vanilla-extract) — no parallel CSS strategies",
+            "Treat accessibility as a build error: lint with eslint-plugin-jsx-a11y or @axe-core",
+            "Ship a design system early: tokens, primitives, then composed components",
         ],
     ),
-    "laptop": (
-        ("laptop", "macbook", "notebook", "ultrabook"),
+    (
+        "Backend / API",
+        ("backend", "back-end", "api", "server", "express", "fastapi", "django", "rails", "rest", "graphql", "endpoint", "rpc"),
         [
-            _Product("Apple MacBook Air M3", 1100, "Fanless, all-day battery, strong single-thread performance"),
-            _Product("Framework Laptop 13", 1200, "Repairable and upgradable; modular ports"),
-            _Product("Lenovo ThinkPad X1 Carbon", 1500, "Excellent keyboard, business-grade Linux support"),
+            "Pick REST for CRUD over resources; GraphQL when clients need flexible projections",
+            "Validate inputs at the edge with a schema library (zod, pydantic, valibot)",
+            "Return typed errors with stable codes; clients should not parse messages",
+            "Idempotency keys on POST endpoints that mutate money or send messages",
+            "Separate transport (HTTP) from domain logic so you can test the latter without a server",
         ],
     ),
-    "phone": (
-        ("phone", "smartphone", "iphone", "android"),
+    (
+        "Database",
+        ("database", "db", "sql", "postgres", "postgresql", "mysql", "sqlite", "mongo", "mongodb", "schema", "migration", "query", "index", "orm"),
         [
-            _Product("Apple iPhone 15", 800, "Long software-support window; mature ecosystem"),
-            _Product("Google Pixel 8", 700, "Cleanest Android build; very strong computational photography"),
-            _Product("Samsung Galaxy S24", 800, "Best-in-class display; broad accessory ecosystem"),
+            "Default to Postgres unless you have a specific reason not to",
+            "Migrations live in version control; never edit applied migrations",
+            "Add indexes for the queries you actually run; verify with EXPLAIN",
+            "Foreign keys + NOT NULL by default; nullable columns are a documented choice",
+            "Avoid premature sharding; vertical scale + read replicas first",
         ],
     ),
-    "coffee": (
-        ("coffee", "espresso", "grinder", "brew"),
+    (
+        "Auth and identity",
+        ("auth", "login", "session", "jwt", "oauth", "sso", "password", "identity"),
         [
-            _Product("Baratza Encore ESP", 200, "Affordable burr grinder that handles both filter and espresso"),
-            _Product("Hario V60 + kettle", 60, "Lowest-cost path to high-quality pourover at home"),
-            _Product("Breville Bambino Plus", 500, "Compact entry to real espresso with steam wand"),
+            "Don't roll your own password storage; use a library that handles bcrypt/argon2",
+            "Sessions in HttpOnly + SameSite cookies for browser apps; JWT for service-to-service",
+            "Short access tokens, longer refresh tokens, server-side revocation list",
+            "OAuth flows: PKCE for public clients, state parameter to prevent CSRF",
+            "Audit log every privilege change with actor, target, and timestamp",
         ],
     ),
-    "books": (
-        ("book", "books", "read", "novel"),
+    (
+        "Deployment and infra",
+        ("deploy", "deployment", "docker", "kubernetes", "k8s", "ci", "cd", "hosting", "vercel", "netlify", "render", "fly", "aws", "gcp", "azure"),
         [
-            _Product("The Pragmatic Programmer (Hunt & Thomas)", 35, "Career-shaping habits for working developers"),
-            _Product("Designing Data-Intensive Applications (Kleppmann)", 50, "The reference for modern backend systems"),
-            _Product("Project Hail Mary (Weir)", 18, "Approachable hard sci-fi for non-work reading"),
+            "Multi-stage Dockerfiles; ship the smallest runtime image you can",
+            "One artifact promoted across environments; never rebuild for production",
+            "Health checks separated into liveness vs readiness; tune both",
+            "Secrets in a manager (AWS SM, GCP SM, Doppler); never in env files committed to git",
+            "Rollback path tested on day one; deploys without rollback plans are bets",
         ],
     ),
-}
+    (
+        "Architecture and scaling",
+        ("architecture", "monolith", "microservice", "scaling", "cache", "queue", "kafka", "redis", "event", "background"),
+        [
+            "Start with a modular monolith; extract services only when team or scale demands it",
+            "Cache the expensive computation, not the entire response, unless you have to",
+            "Background jobs for anything > ~200ms; expose a job status endpoint",
+            "Idempotent job handlers; assume at-least-once delivery from any queue",
+            "Observability before clever architecture: traces, metrics, structured logs",
+        ],
+    ),
+    (
+        "Testing strategy",
+        ("test", "testing", "unit", "integration", "e2e", "end-to-end", "cypress", "playwright", "jest", "vitest", "pytest"),
+        [
+            "Most coverage in fast unit tests; a smaller layer of integration tests; thin e2e on top",
+            "Test public behavior, not private implementation — refactors should not break tests",
+            "One assertion concept per test; the failure message is a debugging tool",
+            "Seed databases via factories (factory_boy, fishery), not raw SQL fixtures",
+            "Run e2e against an ephemeral environment; never the staging shared by humans",
+        ],
+    ),
+]
+
+_FULLSTACK_DEFAULT_STACK = [
+    "Frontend: TypeScript + Next.js (or SvelteKit) + Tailwind + TanStack Query",
+    "Backend: TypeScript with Hono/Express, or Python with FastAPI, behind a single API gateway",
+    "Database: Postgres with a typed ORM (Prisma / Drizzle / SQLAlchemy)",
+    "Auth: provider-managed (Clerk / Auth.js / Cognito) unless you have specific reasons to self-host",
+    "Infra: Docker images, deployed to Fly.io / Render / Railway for early stage; AWS/GCP at scale",
+    "Observability: OpenTelemetry traces, Sentry for errors, structured JSON logs",
+    "CI: typecheck + lint + tests + container build on every PR; deploy on green main",
+]
 
 
-def _budget(text: str) -> int | None:
-    m = re.search(r"\$?\s*(\d{2,5})\b", text)
-    return int(m.group(1)) if m else None
-
-
-def recommend(prompt: str) -> str:
+def fullstack(prompt: str) -> str:
     text = prompt.lower()
-    matched_category: str | None = None
-    for category, (keywords, _) in _CATALOG.items():
-        if any(k in text for k in keywords):
-            matched_category = category
-            break
-
-    if matched_category is None:
-        cats = ", ".join(_CATALOG)
-        return (
-            "Product Recommendation Agent\n"
-            "============================\n\n"
-            f"Tell me what you want to buy. Known categories: {cats}.\n"
-            "You can also include a budget, e.g. 'I want to buy headphones under $300'."
-        )
-
-    budget = _budget(text)
-    products = _CATALOG[matched_category][1]
-    if budget is not None:
-        in_budget = [p for p in products if p.price_usd <= budget]
-        rejected = [p for p in products if p.price_usd > budget]
-    else:
-        in_budget, rejected = products, []
+    matched = [
+        (title, items)
+        for title, keywords, items in _FULLSTACK_LAYERS
+        if _contains_word(text, keywords)
+    ]
 
     out = [
-        "Product Recommendation Agent",
-        "============================",
-        f"Category: {matched_category}",
+        "Fullstack Development Agent",
+        "===========================",
+        "",
     ]
-    if budget is not None:
-        out.append(f"Budget: under ${budget}")
-    out.append("")
 
-    if not in_budget:
-        out.append("Nothing in this category fits the stated budget.")
-        out.append("Closest options above budget:")
-        for p in rejected:
-            out.append(f"  - {p.name} (${p.price_usd}) — {p.why}")
+    if not matched:
+        out.append("No specific layer detected in your prompt.")
+        out.append("")
+        out.append("Reasonable default stack to start from:")
+        for line in _FULLSTACK_DEFAULT_STACK:
+            out.append(f"  - {line}")
+        out.append("")
+        out.append("Mention any of: frontend, backend, database, auth, deploy,")
+        out.append("architecture, or testing to get layer-specific guidance.")
         return "\n".join(out)
 
-    out.append("Recommended:")
-    for p in in_budget:
-        out.append(f"  - {p.name} (${p.price_usd}) — {p.why}")
-    if rejected:
+    out.append("Layer-specific guidance detected from your prompt:")
+    out.append("")
+    for title, items in matched:
+        out.append(f"## {title}")
+        for item in items:
+            out.append(f"  - {item}")
         out.append("")
-        out.append("Stretch picks above budget:")
-        for p in rejected:
-            out.append(f"  - {p.name} (${p.price_usd}) — {p.why}")
-    return "\n".join(out)
+    return "\n".join(out).rstrip()
 
 
 # ---------------------------------------------------------------------------
@@ -459,17 +490,18 @@ def personalize(prompt: str) -> str:
         for w in wants:
             tail = f" within ${budget}" if budget else ""
             suggestions.append(
-                f"For '{w}'{tail}: route via 'buy {w}' to get concrete picks."
+                f"For '{w}'{tail}: re-send with the keyword 'fullstack' for "
+                "stack guidance, or 'code' to study a related topic."
             )
     if likes and not wants:
         suggestions.append(
             "You stated preferences but no concrete request. Add 'I want X' to "
-            "trigger a recommendation."
+            "trigger a follow-up suggestion."
         )
     if not likes and not wants and not dislikes:
         suggestions.append(
-            "No preferences detected. Try: 'I like minimal design and I want "
-            "headphones under $300.'"
+            "No preferences detected. Try: 'I prefer typed languages and I "
+            "want a fullstack starter under tight time budget.'"
         )
 
     out.append("Next steps:")
@@ -535,7 +567,7 @@ def game_assist(prompt: str) -> str:
     text = prompt.lower()
     matched: list[tuple[str, list[str]]] = []
     for genre, (keywords, tips) in _GAME_TIPS.items():
-        if any(k in text for k in keywords):
+        if _contains_word(text, keywords):
             matched.append((genre, tips))
 
     out = ["Gaming AI Assist", "================", ""]

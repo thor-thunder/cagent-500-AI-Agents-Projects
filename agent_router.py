@@ -1,11 +1,11 @@
 """Keyword-based router that dispatches user input to one of the listed AI agents.
 
 Mapping:
-    hack     -> Vibe Hacking Agent
-    code     -> Virtual AI Tutor
-    buy      -> Product Recommendation Agent
-    specify  -> Product Personalization Agent
-    game     -> Gaming AI Assist
+    hack       -> Vibe Hacking Agent
+    code       -> Virtual AI Tutor
+    fullstack  -> Fullstack Development Agent
+    specify    -> Product Personalization Agent
+    game       -> Gaming AI Assist
 
 Handlers are local and deterministic. There are no external API calls.
 """
@@ -17,7 +17,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from agents import game_assist, personalize, recommend, tutor, vibe_hacking
+from agents import fullstack, game_assist, personalize, tutor, vibe_hacking
 
 
 @dataclass(frozen=True)
@@ -38,10 +38,10 @@ AGENTS: dict[str, Agent] = {
         reference="https://github.com/hqanhh/EduGPT",
         handler=tutor,
     ),
-    "buy": Agent(
-        name="Product Recommendation Agent",
-        reference="https://github.com/microsoft/RecAI",
-        handler=recommend,
+    "fullstack": Agent(
+        name="Fullstack Development Agent",
+        reference="https://github.com/All-Hands-AI/OpenHands",
+        handler=fullstack,
     ),
     "specify": Agent(
         name="Product Personalization Agent",
