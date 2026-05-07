@@ -65,3 +65,117 @@ if agent:
 Append an entry to the `AGENTS` dict in `agent_router.py`. The dict's
 insertion order determines match priority. Keep keywords short, lowercase,
 and unlikely to appear incidentally in unrelated input.
+
+## Standing up the upstream projects
+
+The router only points at these projects — it does not bundle them. Each one
+is maintained externally, has its own dependencies, and requires its own API
+keys. The steps below summarize the upstream READMEs as of the time of
+writing; always check the linked repo for the current canonical instructions.
+
+### Vibe Hacking Agent — Decepticon
+
+- Repo: https://github.com/PurpleAILAB/Decepticon
+- License: Apache-2.0
+- Prerequisites: Docker + Docker Compose v2; macOS, Linux, or WSL2 (native
+  Windows unsupported).
+
+Quickest path (installer):
+```bash
+curl -fsSL https://decepticon.red/install | bash
+decepticon onboard   # interactive: provider, API key, model profile
+decepticon           # launches CLI + dashboard at http://localhost:3000
+```
+
+From source:
+```bash
+git clone https://github.com/PurpleAILAB/Decepticon.git
+cd Decepticon
+make dogfood   # full local environment
+# or: make dev   # daily development with hot-reload
+```
+
+> Offensive-security tooling. Use only in authorized engagements (your own
+> infrastructure, CTFs, or written-permission pentests).
+
+### Virtual AI Tutor — EduGPT
+
+- Repo: https://github.com/hqanhh/EduGPT
+- License: MIT
+- Python: 3.10+
+
+```bash
+git clone https://github.com/hqanhh/EduGPT.git
+cd EduGPT
+make venv
+echo "OPENAI_API_KEY=sk-..." > .env
+python src/run.py
+```
+
+Workflow: enter a topic in the "Input Your Information" tab, get a generated
+syllabus, then chat with the instructor agent.
+
+### Product Recommendation Agent — RecAI
+
+- Repo: https://github.com/microsoft/RecAI
+- License: MIT
+- Structure: a monorepo of six independent subprojects, each with its own
+  setup. Pick one and follow that subdirectory's README.
+
+```bash
+git clone https://github.com/microsoft/RecAI.git
+cd RecAI
+ls   # InteRecAgent, Knowledge_Plugin, RecLM-emb, RecLM-gen,
+     # RecExplainer, RecLM-eval
+cd InteRecAgent   # for the conversational recommender agent
+# follow that subdirectory's README for deps and launch commands
+```
+
+There is no top-level install or launch command — each subproject ships its
+own `requirements.txt` and entrypoint.
+
+### Product Personalization Agent — MirrorGPT
+
+- Repo: https://github.com/crosleythomas/MirrorGPT
+- License: see the upstream repo
+
+```bash
+git clone git@github.com:crosleythomas/MirrorGPT.git
+cd MirrorGPT
+mkdir -p mirror/data/local
+python3 -m venv .env
+source .env/bin/activate
+pip install -e .
+brew install portaudio ffmpeg   # macOS; install equivalents on Linux
+cd mirror
+pip3 install -r requirements.txt
+cp config/.env.template config/.env
+# edit config/.env: OPENAI_API_KEY (required),
+# ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID (optional, for voice)
+```
+
+Run the sample mirror:
+```bash
+python entrypoints/run_mirror.py \
+  --data-path "$(pwd)/data/sample/" \
+  -t chroma \
+  -g "What is your name?"
+```
+
+### Gaming AI Assist — LLM-agent-game
+
+- Repo: https://github.com/onjas-buidl/LLM-agent-game
+- License: Unlicense (public domain)
+
+```bash
+git clone https://github.com/onjas-buidl/LLM-agent-game.git
+cd LLM-agent-game
+export OPENAI_API_KEY=sk-...
+mkdir -p logs
+python ExplorerAgent.py
+```
+
+`ExplorerAgent.py` exposes parameters such as `world_size` and per-agent
+principles. Per the upstream README, ~30 rounds cost under $0.10 in API
+usage. The author notes the agent is intentionally simple and may behave
+unpredictably.
