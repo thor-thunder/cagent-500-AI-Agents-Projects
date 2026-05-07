@@ -1,15 +1,18 @@
 # Agent Router
 
 `agent_router.py` dispatches a user message to one of five AI agents based on a
-trigger keyword found in the input. Matching is case-insensitive and uses word
-boundaries, so `encoded` does not trigger the `code` route.
+trigger keyword found in the input. Each agent is implemented locally in
+`agents.py` and runs without any external API calls.
+
+Matching is case-insensitive and uses word boundaries, so `hackathon` does not
+trigger the `hack` route and `decoded` does not trigger the `code` route.
 
 ## Keyword → Agent map
 
 | Keyword   | Agent                          | Reference                                           |
 | --------- | ------------------------------ | --------------------------------------------------- |
-| `code`    | Vibe Hacking Agent             | https://github.com/PurpleAILAB/Decepticon           |
-| `help`    | Virtual AI Tutor               | https://github.com/hqanhh/EduGPT                    |
+| `hack`    | Vibe Hacking Agent             | https://github.com/PurpleAILAB/Decepticon           |
+| `code`    | Virtual AI Tutor               | https://github.com/hqanhh/EduGPT                    |
 | `buy`     | Product Recommendation Agent   | https://github.com/microsoft/RecAI                  |
 | `specify` | Product Personalization Agent  | https://github.com/crosleythomas/MirrorGPT          |
 | `game`    | Gaming AI Assist               | https://github.com/onjas-buidl/LLM-agent-game       |
@@ -20,31 +23,38 @@ print a hint listing the valid keywords on the CLI.
 
 ## Agent descriptions
 
-### Vibe Hacking Agent — trigger: `code`
-Autonomous multi-agent red-team testing service. Use for offensive-security
-exercises, vulnerability discovery, and adversarial code review.
+### Vibe Hacking Agent — trigger: `hack`
+Returns a phased red-team engagement plan (scoping → recon → exploitation →
+reporting) plus a tailored checklist for each surface mentioned in the prompt:
+web, network, auth, cloud, or mobile. Includes an explicit authorization
+reminder. Use only against assets you have permission to test.
 
-### Virtual AI Tutor — trigger: `help`
-Personalized tutor that adapts to the learner. Use for explanation, study
-guidance, and step-by-step problem walkthroughs.
+### Virtual AI Tutor — trigger: `code`
+Picks a lesson based on topic keywords (recursion, complexity, debugging, data
+structures, testing) and returns a summary, key vocabulary, a worked example,
+practice problems, and further reading.
 
 ### Product Recommendation Agent — trigger: `buy`
-LLM-powered recommender. Use when a user is shopping or comparing items.
+Detects a category (headphones, laptop, phone, coffee, books) and returns
+ranked picks with rationale and price. Honors a stated budget such as
+`under $300`; lists stretch picks separately when present.
 
 ### Product Personalization Agent — trigger: `specify`
-Personalization agent that tailors output to declared user preferences. Use
-when the user explicitly states constraints, taste, or requirements.
+Parses preference statements (`I like X`, `I prefer Y`, `I dislike Z`,
+`I want W`, `under $N`) and returns a structured profile plus suggested next
+steps, including a hand-off into the `buy` route when a concrete want is
+detected.
 
 ### Gaming AI Assist — trigger: `game`
-In-game companion that supports players in real time. Use for gameplay help,
-strategy hints, and interactive game-side assistance.
+Detects game genre (chess, FPS, RPG, strategy, puzzle) and returns concise
+strategy tips per genre. Multiple genres in one prompt produce multiple
+sections.
 
 ## Usage
 
 ```bash
 # One-shot
-python3 agent_router.py "I want to write some code today"
-# -> Vibe Hacking Agent (https://github.com/PurpleAILAB/Decepticon)
+python3 agent_router.py "I want to buy headphones under \$300"
 
 # Interactive (Ctrl-D to exit)
 python3 agent_router.py
@@ -53,25 +63,46 @@ python3 agent_router.py
 As a library:
 
 ```python
-from agent_router import route
+from agent_router import route, dispatch
 
-agent = route("please help me learn")
+agent = route("teach me recursion in code")
 if agent:
     print(agent.name, agent.reference)
+
+print(dispatch("how do I improve my chess game?"))
 ```
 
 ## Adding a new agent
 
-Append an entry to the `AGENTS` dict in `agent_router.py`. The dict's
-insertion order determines match priority. Keep keywords short, lowercase,
-and unlikely to appear incidentally in unrelated input.
+1. Write a handler in `agents.py` with the signature `def handler(prompt: str) -> str`.
+   It must be deterministic and must not call any external API.
+2. Append an entry to the `AGENTS` dict in `agent_router.py`. Insertion order
+   determines match priority. Choose a keyword that is short, lowercase, and
+   unlikely to appear incidentally in unrelated input.
+3. Add a row to the keyword table above and a description below.
+
+## Why no API?
+
+The five handlers in `agents.py` are deterministic and self-contained. They do
+not call OpenAI, Anthropic, or any other service. This means:
+
+- Zero per-request cost and zero rate-limit risk.
+- Reproducible output for the same input.
+- The router runs in any environment with just Python 3.10+, no secrets and
+  no network access required.
+
+The trade-off is that responses are rule-based and bounded to the topics
+encoded in `agents.py`. To get LLM-quality, open-ended responses, see
+*Standing up the upstream projects* below.
 
 ## Standing up the upstream projects
 
-The router only points at these projects — it does not bundle them. Each one
-is maintained externally, has its own dependencies, and requires its own API
-keys. The steps below summarize the upstream READMEs as of the time of
-writing; always check the linked repo for the current canonical instructions.
+The `reference` field on each agent points at an external project that
+inspired its name. Those projects are full LLM-backed implementations with
+their own dependencies and API keys. The local handlers here are not faithful
+reproductions; they are deterministic stand-ins suitable for routing demos and
+offline use. Setup notes for each upstream project are preserved below for
+reference.
 
 ### Vibe Hacking Agent — Decepticon
 
@@ -112,9 +143,6 @@ echo "OPENAI_API_KEY=sk-..." > .env
 python src/run.py
 ```
 
-Workflow: enter a topic in the "Input Your Information" tab, get a generated
-syllabus, then chat with the instructor agent.
-
 ### Product Recommendation Agent — RecAI
 
 - Repo: https://github.com/microsoft/RecAI
@@ -125,19 +153,13 @@ syllabus, then chat with the instructor agent.
 ```bash
 git clone https://github.com/microsoft/RecAI.git
 cd RecAI
-ls   # InteRecAgent, Knowledge_Plugin, RecLM-emb, RecLM-gen,
-     # RecExplainer, RecLM-eval
-cd InteRecAgent   # for the conversational recommender agent
+cd InteRecAgent   # or another subproject
 # follow that subdirectory's README for deps and launch commands
 ```
-
-There is no top-level install or launch command — each subproject ships its
-own `requirements.txt` and entrypoint.
 
 ### Product Personalization Agent — MirrorGPT
 
 - Repo: https://github.com/crosleythomas/MirrorGPT
-- License: see the upstream repo
 
 ```bash
 git clone git@github.com:crosleythomas/MirrorGPT.git
@@ -152,10 +174,7 @@ pip3 install -r requirements.txt
 cp config/.env.template config/.env
 # edit config/.env: OPENAI_API_KEY (required),
 # ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID (optional, for voice)
-```
 
-Run the sample mirror:
-```bash
 python entrypoints/run_mirror.py \
   --data-path "$(pwd)/data/sample/" \
   -t chroma \
@@ -174,8 +193,3 @@ export OPENAI_API_KEY=sk-...
 mkdir -p logs
 python ExplorerAgent.py
 ```
-
-`ExplorerAgent.py` exposes parameters such as `world_size` and per-agent
-principles. Per the upstream README, ~30 rounds cost under $0.10 in API
-usage. The author notes the agent is intentionally simple and may behave
-unpredictably.
